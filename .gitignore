@@ -41,3 +41,15 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Python
+.venv/
+**/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Environment files
+.env
+.env.*
+!.env.example

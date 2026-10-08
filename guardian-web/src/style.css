@@ -1,0 +1,72 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #172033;
+  background: #f4f6fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .6; }
+
+#app { min-height: 100vh; padding: 40px 20px; }
+.login-card, .dashboard { width: min(100%, 900px); margin: 0 auto; }
+.login-card { max-width: 420px; margin-top: 8vh; padding: 32px; background: white; border: 1px solid #e4e8f0; border-radius: 16px; box-shadow: 0 12px 40px #1b2c4b0d; }
+.eyebrow { margin: 0 0 8px; color: #5265c5; font-size: 12px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 8px; font-size: clamp(25px, 4vw, 32px); }
+h2 { margin-bottom: 4px; font-size: 19px; }
+.muted { color: #68748b; }
+label { display: grid; gap: 7px; margin: 18px 0; color: #374258; font-size: 14px; font-weight: 650; }
+input { width: 100%; padding: 12px 13px; border: 1px solid #d5dbe7; border-radius: 9px; outline-color: #5265c5; }
+.primary, .secondary { padding: 10px 15px; border: 0; border-radius: 9px; font-weight: 700; }
+.primary { width: 100%; margin-top: 8px; color: white; background: #4659b8; }
+.secondary { color: #344266; background: #edf0f8; }
+.topbar, .account, .list-heading, .incident-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.topbar { margin: 8px 0 26px; }
+.topbar h1 { margin: 0; }
+.account { color: #5c667b; font-size: 14px; }
+.panel { padding: 24px; background: white; border: 1px solid #e4e8f0; border-radius: 16px; box-shadow: 0 12px 40px #1b2c4b0d; }
+.list-heading { align-items: flex-start; margin-bottom: 20px; }
+.list-heading p { margin: 0; }
+.incident-list { display: grid; gap: 14px; }
+.incident-card { display: block; width: 100%; padding: 18px; color: inherit; text-align: left; background: white; border: 1px solid #e4e8f0; border-radius: 12px; }
+.incident-card:hover { border-color: #aab4df; box-shadow: 0 5px 16px #1b2c4b0d; }
+.incident-card:focus-visible, .back-button:focus-visible { outline: 3px solid #8190e5; outline-offset: 2px; }
+.back-button { margin-bottom: 16px; }
+.detail-panel { margin-top: 12px; }
+.detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 14px; }
+.action-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.action-button { width: auto; margin: 0; }
+.detail-section { margin-top: 26px; }
+.detail-section h2 { margin-bottom: 12px; }
+.location-box { padding: 14px; background: #f6f7fb; border-radius: 10px; }
+.location-box p { margin: 4px 0; overflow-wrap: anywhere; }
+.ack-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.ack-list li { display: grid; gap: 4px; padding: 12px; background: #f6f7fb; border-radius: 10px; }
+.ack-list small { color: #7a8497; overflow-wrap: anywhere; }
+.incident-heading { justify-content: flex-start; margin-bottom: 12px; }
+.status, .trigger { padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 750; text-transform: capitalize; }
+.status-active { color: #176843; background: #e3f5ec; }
+.status-acknowledged { color: #79520b; background: #fff1d1; }
+.trigger { color: #566078; background: #f0f2f7; }
+dl { display: grid; grid-template-columns: 1.2fr 1fr .8fr; gap: 12px; margin: 0; }
+dt { margin-bottom: 4px; color: #7a8497; font-size: 12px; }
+dd { margin: 0; overflow-wrap: anywhere; font-size: 14px; }
+.id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+.message { margin: 18px 0 0; padding: 11px 12px; border-radius: 9px; font-size: 13px; }
+.error { color: #9b2e2e; background: #fff0f0; }
+.success { color: #176843; background: #e3f5ec; }
+.error:empty { display: none; }
+.success:empty { display: none; }
+
+@media (max-width: 620px) {
+  #app { padding: 22px 14px; }
+  .topbar, .account { align-items: flex-start; flex-direction: column; }
+  .account { gap: 9px; }
+  .panel { padding: 18px; }
+  dl { grid-template-columns: 1fr; }
+}
