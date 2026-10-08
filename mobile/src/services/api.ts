@@ -142,7 +142,7 @@ export async function createGuardianInviteAPI() {
         "Content-Type": "application/json",
         ...authHeader
       },
-      body: JSON.stringify({ note: "Add me as trusted guardian" })
+      body: JSON.stringify({ display_name: "New Guardian", priority: 1 })
     });
     if (!res.ok) return null;
     return await res.json();
@@ -154,13 +154,14 @@ export async function createGuardianInviteAPI() {
 export async function createJourneyAPI(destination: string, etaMinutes: number) {
   try {
     const authHeader = await getAuthHeader();
+    const eta_at = new Date(Date.now() + etaMinutes * 60000).toISOString();
     const res = await fetch(`${API_BASE_URL}/journeys`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...authHeader
       },
-      body: JSON.stringify({ destination_label: destination, eta_minutes: etaMinutes })
+      body: JSON.stringify({ destination_label: destination, eta_at: eta_at })
     });
     if (!res.ok) return null;
     return await res.json();
