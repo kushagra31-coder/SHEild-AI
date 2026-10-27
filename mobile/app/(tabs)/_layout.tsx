@@ -52,6 +52,14 @@ export default function TabsLayout() {
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 18 }}>📋</Text>,
         }}
       />
+      {/* history.tsx is accessible via direct navigation but hidden from tab bar */}
+      <Tabs.Screen
+        name="history"
+        options={{
+          href: null,
+          title: "History",
+        }}
+      />
     </Tabs>
   );
 }

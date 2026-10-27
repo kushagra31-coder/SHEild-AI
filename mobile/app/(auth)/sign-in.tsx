@@ -14,7 +14,7 @@ import {
 import { useAuth } from "../../src/context/AuthContext";
 
 export default function SignInScreen() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, loginAsDemo } = useAuth();
 
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -71,16 +71,29 @@ export default function SignInScreen() {
       if (isSignUp) {
         const res = await signUp(email, password, displayName, phoneNumber);
         if (res.error) {
-          setErrorMessage(res.error);
+          if (res.error.toLowerCase().includes("fetch") || res.error.toLowerCase().includes("network")) {
+            setErrorMessage("Cloud Supabase is not connected. Tap 'Continue as Demo User' below to test all features locally.");
+          } else {
+            setErrorMessage(res.error);
+          }
         }
       } else {
         const res = await signIn(email, password);
         if (res.error) {
-          setErrorMessage(res.error);
+          if (res.error.toLowerCase().includes("fetch") || res.error.toLowerCase().includes("network")) {
+            setErrorMessage("Cloud Supabase is not connected. Tap 'Continue as Demo User' below to test all features locally.");
+          } else {
+            setErrorMessage(res.error);
+          }
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || "Authentication failed. Please try again.");
+      const msg = err.message || "";
+      if (msg.toLowerCase().includes("fetch") || msg.toLowerCase().includes("network")) {
+        setErrorMessage("Cloud Supabase is not connected. Tap 'Continue as Demo User' below to test all features locally.");
+      } else {
+        setErrorMessage(msg || "Authentication failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -209,6 +222,20 @@ export default function SignInScreen() {
                 )}
               </Text>
             </TouchableOpacity>
+
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>LOCAL TEST MODE</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.demoButton}
+              onPress={() => loginAsDemo(displayName || "Akaza", email || "chouhanaditya169@gmail.com")}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.demoButtonText}>⚡ Continue as Demo User (Bypass Cloud Auth)</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -331,5 +358,35 @@ const styles = StyleSheet.create({
   toggleHighlight: {
     color: "#38bdf8",
     fontWeight: "700",
+  },
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#334155",
+  },
+  dividerText: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1,
+    paddingHorizontal: 12,
+  },
+  demoButton: {
+    backgroundColor: "#1e293b",
+    borderColor: "#38bdf8",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  demoButtonText: {
+    color: "#38bdf8",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

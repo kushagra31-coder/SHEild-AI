@@ -82,7 +82,7 @@ export default function TriggersScreen() {
         setSirenPlaying(false);
       } else {
         const { sound } = await Audio.Sound.createAsync(
-          require("../../../assets/siren.wav")
+          require("../../assets/siren.wav")
         );
         soundRef.current = sound;
         await sound.setIsLoopingAsync(true);
@@ -143,7 +143,7 @@ export default function TriggersScreen() {
           <View style={styles.stateBannerListening}>
             <Text style={styles.stateTitleListening}>🎙️ Listening for "Help" or "Bachao"...</Text>
             {liveTranscript ? (
-              <Text style={styles.transcriptText}>Heard: "{liveTranscript}"</Text>
+              <Text style={styles.transcriptText}>Heard: &quot;{liveTranscript}&quot;</Text>
             ) : (
               <Text style={styles.transcriptSub}>Speak clearly near device microphone</Text>
             )}
@@ -166,13 +166,21 @@ export default function TriggersScreen() {
 
         {voiceState === "unavailable" && (
           <View style={styles.stateBannerUnavailable}>
-            <Text style={styles.stateTitleUnavailable}>ℹ️ Speech Engine Unsupported / Manual Simulation</Text>
-            <TouchableOpacity
-              onPress={() => handleTriggerVoiceSOS("help")}
-              style={styles.manualVoiceSimBtn}
-            >
-              <Text style={styles.manualVoiceSimText}>Simulate "Help" Voice Trigger 🗣️</Text>
-            </TouchableOpacity>
+            <Text style={styles.stateTitleUnavailable}>ℹ️ Speech Engine Unavailable / Simulator Mode</Text>
+            <View style={styles.manualVoiceRow}>
+              <TouchableOpacity
+                onPress={() => handleTriggerVoiceSOS("help")}
+                style={[styles.manualVoiceSimBtn, { flex: 1 }]}
+              >
+                <Text style={styles.manualVoiceSimText}>Test "Help" 🗣️</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleTriggerVoiceSOS("bachao")}
+                style={[styles.manualVoiceSimBtn, { flex: 1, backgroundColor: "#9d174d" }]}
+              >
+                <Text style={styles.manualVoiceSimText}>Test "Bachao" 🗣️</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </View>
@@ -243,6 +251,7 @@ const styles = StyleSheet.create({
   stateSubDenied: { color: "#fde68a", fontSize: 12, marginTop: 2 },
   stateBannerUnavailable: { marginTop: 14, backgroundColor: "#1e293b", borderWidth: 1, borderColor: "#334155", padding: 12, borderRadius: 12 },
   stateTitleUnavailable: { color: "#cbd5e1", fontWeight: "700", fontSize: 12, marginBottom: 8 },
+  manualVoiceRow: { flexDirection: "row", gap: 10 },
   manualVoiceSimBtn: { backgroundColor: "#be185d", paddingVertical: 10, borderRadius: 10, alignItems: "center" },
   manualVoiceSimText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13 },
   sirenBtn: { backgroundColor: "#be185d", paddingVertical: 14, borderRadius: 14, alignItems: "center", marginTop: 14 },

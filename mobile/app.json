@@ -8,24 +8,47 @@
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SHEild AI needs your location to broadcast it to your guardians during an emergency.",
+        "NSMicrophoneUsageDescription": "SHEild AI needs microphone access for the voice trigger keyword detection feature.",
+        "NSCameraUsageDescription": "SHEild AI needs camera access for emergency evidence recording during an SOS incident."
+      }
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#080d1a"
       },
       "package": "com.sheildai.mobile",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
-        "RECORD_AUDIO"
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "RECORD_AUDIO",
+        "CAMERA",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
       ]
     },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "SHEild AI needs location access to share your live coordinates with guardians during emergencies."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SHEild AI needs camera access for emergency video evidence capture."
+        }
+      ]
     ]
   }
 }

@@ -136,7 +136,6 @@ class OfflineOutbox {
 
     this.isSyncing = true;
     const synced: IncidentResponse[] = [];
-    const updatedQueue: OutboxItem[] = [];
 
     for (const item of this.queue) {
       if (item.status === "SENT_ACCEPTED") {
@@ -156,16 +155,15 @@ class OfflineOutbox {
         } else {
           item.status = "FAILED";
           item.last_error = "Server unavailable or network request failed";
-          updatedQueue.push(item);
         }
       } catch (err: any) {
         item.status = "FAILED";
         item.last_error = err?.message || "Network execution exception";
-        updatedQueue.push(item);
       }
     }
 
-    this.queue = updatedQueue;
+    // Prune successfully sent items from persistent queue to keep it clean
+    this.queue = this.queue.filter(i => i.status !== "SENT_ACCEPTED");
     await writeStorage(this.queue);
     this.isSyncing = false;
 

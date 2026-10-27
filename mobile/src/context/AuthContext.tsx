@@ -15,6 +15,7 @@ interface AuthContextType {
     phoneNumber?: string
   ) => Promise<{ error: string | null }>;
   signOut: () => Promise<{ error: string | null }>;
+  loginAsDemo: (name?: string, email?: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   signIn: async () => ({ error: "Not initialized" }),
   signUp: async () => ({ error: "Not initialized" }),
   signOut: async () => ({ error: "Not initialized" }),
+  loginAsDemo: () => {},
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -97,8 +99,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res;
   };
 
+  const loginAsDemo = (name: string = "Akaza", userEmail: string = "chouhanaditya169@gmail.com") => {
+    const mockUser: User = {
+      id: "demo-user-123",
+      app_metadata: { provider: "email" },
+      user_metadata: { display_name: name, full_name: name },
+      aud: "authenticated",
+      created_at: new Date().toISOString(),
+      email: userEmail,
+      role: "authenticated",
+    } as unknown as User;
+
+    const mockSession: Session = {
+      access_token: "mock-demo-access-token",
+      token_type: "bearer",
+      expires_in: 3600,
+      refresh_token: "mock-demo-refresh-token",
+      user: mockUser,
+    };
+
+    setSession(mockSession);
+    setUser(mockUser);
+  };
+
   return (
-    <AuthContext.Provider value={{ session, user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ session, user, loading, signIn, signUp, signOut, loginAsDemo }}>
       {children}
     </AuthContext.Provider>
   );

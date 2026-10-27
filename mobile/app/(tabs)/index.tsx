@@ -15,11 +15,21 @@ import {
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { Audio } from "expo-av";
-import { Accelerometer } from "expo-sensors";
 import { createIncidentAPI, fetchIncidentAPI, resolveIncidentAPI, sendLocationAPI, IncidentResponse } from "../../src/services/api";
 import { offlineOutbox } from "../../src/services/offline-outbox";
 import { shakeDetector } from "../../src/services/shake-detector";
 import { useAuth } from "../../src/context/AuthContext";
+import { SafetyMap } from "../../src/components/SafetyMap";
+import { EvidenceRecorderModal } from "../../src/components/EvidenceRecorderModal";
+import { LiveShareModal } from "../../src/components/LiveShareModal";
+import { ReportHazardModal } from "../../src/components/ReportHazardModal";
+import {
+  safetyRadarService,
+  AreaSafetyScore,
+  CrowdZone,
+  SafetyHazardReport,
+  DEFAULT_CROWD_ZONES
+} from "../../src/services/safety-radar";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -27,7 +37,16 @@ export default function HomeScreen() {
   const userDisplayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "User";
   const [location, setLocation] = useState<any>({ latitude: 28.6139, longitude: 77.2090, accuracy: 12 });
   const [activeIncident, setActiveIncident] = useState<IncidentResponse | null>(null);
-  
+  const activeIncidentRef = useRef<IncidentResponse | null>(null);
+
+  // Safetipin & bSafe Modals & Data
+  const [showEvidenceModal, setShowEvidenceModal] = useState(false);
+  const [showLiveShareModal, setShowLiveShareModal] = useState(false);
+  const [showReportHazardModal, setShowReportHazardModal] = useState(false);
+  const [crowdZones, setCrowdZones] = useState<CrowdZone[]>(DEFAULT_CROWD_ZONES);
+  const [hazards, setHazards] = useState<SafetyHazardReport[]>([]);
+  const [safetyScore, setSafetyScore] = useState<AreaSafetyScore | null>(null);
+
   // Developer Failure State Simulators
   const [noInternet, setNoInternet] = useState(false);
   const [gpsActive, setGpsActive] = useState(true);
@@ -57,6 +76,15 @@ export default function HomeScreen() {
       setPendingOutboxCount(pending.length);
     };
     initOutbox();
+
+    // Initialize Safetipin community hazards & area safety score
+    const initRadar = async () => {
+      const hz = await safetyRadarService.getCommunityHazards();
+      setHazards(hz);
+      const score = safetyRadarService.calculateAreaSafetyScore(location?.latitude || 28.6139, location?.longitude || 77.2090);
+      setSafetyScore(score);
+    };
+    initRadar();
 
     return () => {
       if (soundRef.current) {
@@ -128,7 +156,8 @@ export default function HomeScreen() {
       windowMs: 1500,
       cooldownMs: 5000,
       onShakeDetected: () => {
-        if (!activeIncident) {
+        // Use ref to avoid stale closure capturing initial null value
+        if (!activeIncidentRef.current) {
           startCountdown("shake");
         }
       }
@@ -144,7 +173,7 @@ export default function HomeScreen() {
         setSirenPlaying(false);
       } else {
         const { sound } = await Audio.Sound.createAsync(
-          require("../../../assets/siren.wav")
+          require("../../assets/siren.wav")
         );
         soundRef.current = sound;
         await sound.setIsLoopingAsync(true);
@@ -228,32 +257,37 @@ export default function HomeScreen() {
 
     if (noInternet) {
       offlineOutbox.enqueue(payload);
-      setActiveIncident({
+      const offlineIncident = {
         id: clientEventId,
         owner_id: "user-123",
         client_event_id: clientEventId,
         trigger: triggerType,
-        status: "draft_local",
-        alert_status: "queued",
+        status: "draft_local" as const,
+        alert_status: "queued" as const,
         started_at: new Date().toISOString()
-      });
+      };
+      setActiveIncident(offlineIncident);
+      activeIncidentRef.current = offlineIncident;
       return;
     }
 
     const res = await createIncidentAPI(payload);
     if (res) {
       setActiveIncident(res);
+      activeIncidentRef.current = res;
     } else {
       offlineOutbox.enqueue(payload);
-      setActiveIncident({
+      const localIncident = {
         id: clientEventId,
         owner_id: "user-123",
         client_event_id: clientEventId,
         trigger: triggerType,
-        status: "draft_local",
-        alert_status: "queued",
+        status: "draft_local" as const,
+        alert_status: "queued" as const,
         started_at: new Date().toISOString()
-      });
+      };
+      setActiveIncident(localIncident);
+      activeIncidentRef.current = localIncident;
     }
   };
 
@@ -261,6 +295,7 @@ export default function HomeScreen() {
     if (activeIncident && activeIncident.id) {
       await resolveIncidentAPI(activeIncident.id);
       setActiveIncident(null);
+      activeIncidentRef.current = null;
       if (sirenPlaying && soundRef.current) {
         soundRef.current.stopAsync();
         setSirenPlaying(false);
@@ -362,17 +397,17 @@ export default function HomeScreen() {
       )}
 
       {/* Central Circular SOS Button */}
+      {/* onPress removed intentionally: hold (onPressIn/onPressOut) is the sole trigger to prevent double-fire */}
       <View style={styles.sosContainer}>
         <Pressable
           onPressIn={startHold}
           onPressOut={cancelHold}
-          onPress={() => startCountdown("manual")}
           style={styles.sosButton}
         >
           <Animated.View style={[styles.progressFill, { width: fillWidth }]} />
           <View style={styles.sosContent}>
             <Text style={styles.sosTitle}>SOS</Text>
-            <Text style={styles.sosSubtitle}>HOLD 3 SECONDS FOR HELP</Text>
+            <Text style={styles.sosSubtitle}>HOLD 1.5 SEC FOR HELP</Text>
           </View>
         </Pressable>
       </View>
@@ -427,11 +462,93 @@ export default function HomeScreen() {
           Accuracy: ±{location?.accuracy || 12} meters • Updated just now
         </Text>
 
-        <View style={styles.radarMapBox}>
-          <Text style={styles.mapPin}>📍</Text>
-          <Text style={styles.mapTrackingTitle}>Live GPS Radar Tracking</Text>
-          <Text style={styles.mapTrackingSub}>Connected to SHEild AI ReST API Backend</Text>
+        {/* Interactive OpenStreetMap & Safetipin Crowd Radar */}
+        <SafetyMap
+          latitude={location?.latitude || 28.6139}
+          longitude={location?.longitude || 77.2090}
+          accuracy={location?.accuracy || 12}
+          crowdZones={crowdZones}
+          hazards={hazards}
+          isSosActive={!!activeIncident && activeIncident.status !== "resolved"}
+          height={280}
+        />
+
+        {/* bSafe & Safetipin Quick Action Buttons */}
+        <View style={styles.quickActionsBar}>
+          <TouchableOpacity
+            onPress={() => setShowEvidenceModal(true)}
+            activeOpacity={0.8}
+            style={[styles.quickActionBtn, styles.evidenceBtn]}
+          >
+            <Text style={styles.quickActionIcon}>🎥</Text>
+            <Text style={styles.quickActionLabel}>bSafe Evidence</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowLiveShareModal(true)}
+            activeOpacity={0.8}
+            style={[styles.quickActionBtn, styles.liveShareBtn]}
+          >
+            <Text style={styles.quickActionIcon}>📡</Text>
+            <Text style={styles.quickActionLabel}>Live Track Link</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowReportHazardModal(true)}
+            activeOpacity={0.8}
+            style={[styles.quickActionBtn, styles.pinHazardBtn]}
+          >
+            <Text style={styles.quickActionIcon}>📍</Text>
+            <Text style={styles.quickActionLabel}>Pin Hazard</Text>
+          </TouchableOpacity>
         </View>
+
+        {/* My Safetipin Area Safety Score Card */}
+        {safetyScore && (
+          <View style={styles.safetyScoreCard}>
+            <View style={styles.safetyScoreHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.safetyScoreTag}>MY SAFETIPIN • AREA SAFETY AUDIT</Text>
+                <Text style={styles.safetyScoreTitle}>
+                  {safetyScore.grade === "HIGHLY_SAFE"
+                    ? "🟢 Highly Safe Perimeter"
+                    : safetyScore.grade === "MODERATE_CAUTION"
+                    ? "🟡 Moderate Caution Zone"
+                    : "🔴 High Alert Zone"}
+                </Text>
+              </View>
+              <View style={styles.scoreBadgeCircle}>
+                <Text style={styles.scoreBadgeNum}>{safetyScore.score}</Text>
+                <Text style={styles.scoreBadgeMax}>/10</Text>
+              </View>
+            </View>
+
+            <Text style={styles.safetyScoreSummary}>{safetyScore.summary}</Text>
+
+            <View style={styles.safetyParamGrid}>
+              <View style={styles.paramItem}>
+                <Text style={styles.paramEmoji}>💡</Text>
+                <Text style={styles.paramLabel}>Lighting</Text>
+                <Text style={styles.paramVal}>{safetyScore.parameters.lighting}/10</Text>
+              </View>
+              <View style={styles.paramItem}>
+                <Text style={styles.paramEmoji}>👥</Text>
+                <Text style={styles.paramLabel}>Crowd Density</Text>
+                <Text style={styles.paramVal}>{safetyScore.parameters.crowdDensity}/10</Text>
+              </View>
+              <View style={styles.paramItem}>
+                <Text style={styles.paramEmoji}>👮</Text>
+                <Text style={styles.paramLabel}>Security/Police</Text>
+                <Text style={styles.paramVal}>{safetyScore.parameters.securityPresence}/10</Text>
+              </View>
+              <View style={styles.paramItem}>
+                <Text style={styles.paramEmoji}>🚶</Text>
+                <Text style={styles.paramLabel}>Feeling/Walk</Text>
+                <Text style={styles.paramVal}>{safetyScore.parameters.feeling}/10</Text>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* 3-Second Cancellation Modal */}
@@ -465,6 +582,35 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* bSafe Emergency Evidence Camera Viewfinder Modal */}
+      <EvidenceRecorderModal
+        visible={showEvidenceModal}
+        onClose={() => setShowEvidenceModal(false)}
+        incidentId={activeIncident?.id}
+        latitude={location?.latitude || 28.6139}
+        longitude={location?.longitude || 77.2090}
+      />
+
+      {/* bSafe Real-Time Trusted Network Live Share Modal */}
+      <LiveShareModal
+        visible={showLiveShareModal}
+        onClose={() => setShowLiveShareModal(false)}
+        incidentId={activeIncident?.id}
+        latitude={location?.latitude || 28.6139}
+        longitude={location?.longitude || 77.2090}
+      />
+
+      {/* My Safetipin Community Hazard Pinning Modal */}
+      <ReportHazardModal
+        visible={showReportHazardModal}
+        onClose={() => setShowReportHazardModal(false)}
+        latitude={location?.latitude || 28.6139}
+        longitude={location?.longitude || 77.2090}
+        onHazardReported={(newHazard) => {
+          setHazards((prev) => [newHazard, ...prev]);
+        }}
+      />
     </ScrollView>
   );
 }
@@ -737,6 +883,122 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontSize: 12,
     marginTop: 4
+  },
+  quickActionsBar: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 16
+  },
+  quickActionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1
+  },
+  evidenceBtn: {
+    backgroundColor: "#1e1b4b",
+    borderColor: "#6366f1"
+  },
+  liveShareBtn: {
+    backgroundColor: "#082f49",
+    borderColor: "#0284c7"
+  },
+  pinHazardBtn: {
+    backgroundColor: "#311029",
+    borderColor: "#ec4899"
+  },
+  quickActionIcon: {
+    fontSize: 18,
+    marginBottom: 4
+  },
+  quickActionLabel: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+    textAlign: "center"
+  },
+  safetyScoreCard: {
+    backgroundColor: "#0d1527",
+    borderWidth: 1,
+    borderColor: "#1e3a8a",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 10
+  },
+  safetyScoreHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8
+  },
+  safetyScoreTag: {
+    color: "#38bdf8",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.5
+  },
+  safetyScoreTitle: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
+    marginTop: 2
+  },
+  scoreBadgeCircle: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    backgroundColor: "#064e3b",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#10b981"
+  },
+  scoreBadgeNum: {
+    color: "#34d399",
+    fontSize: 20,
+    fontWeight: "900"
+  },
+  scoreBadgeMax: {
+    color: "#a7f3d0",
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  safetyScoreSummary: {
+    color: "#94a3b8",
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 12
+  },
+  safetyParamGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: "#090e1d",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1e293b"
+  },
+  paramItem: {
+    alignItems: "center"
+  },
+  paramEmoji: {
+    fontSize: 14
+  },
+  paramLabel: {
+    color: "#64748b",
+    fontSize: 9,
+    fontWeight: "700",
+    marginTop: 2
+  },
+  paramVal: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 1
   },
   modalOverlay: {
     flex: 1,

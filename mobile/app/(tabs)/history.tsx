@@ -27,12 +27,12 @@ export default function HistoryScreen() {
         incidents.map((i) => (
           <View key={i.id} style={styles.card}>
             <View style={styles.row}>
-              <Text style={styles.triggerText}>{i.trigger.toUpperCase()} SOS</Text>
+              <Text style={styles.triggerText}>{(i.trigger || "manual").toUpperCase()} SOS</Text>
               <Text style={[styles.statusBadge, i.status === "resolved" ? styles.resolved : styles.active]}>
-                {i.status.toUpperCase()}
+                {(i.status || "active").toUpperCase()}
               </Text>
             </View>
-            <Text style={styles.timeText}>Triggered: {new Date(i.started_at).toLocaleString()}</Text>
+            <Text style={styles.timeText}>Triggered: {new Date(i.started_at || Date.now()).toLocaleString()}</Text>
             {i.resolved_at && (
               <Text style={styles.resolvedTime}>Resolved: {new Date(i.resolved_at).toLocaleString()}</Text>
             )}
