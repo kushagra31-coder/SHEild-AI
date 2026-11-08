@@ -10,6 +10,7 @@ import {
   Linking
 } from "react-native";
 import { Audio } from "expo-av";
+import { generateSecureUUID } from "../../src/utils/uuid";
 import { voiceTriggerEngine, VoiceState } from "../../src/services/voice-trigger";
 import { createIncidentAPI } from "../../src/services/api";
 import { offlineOutbox } from "../../src/services/offline-outbox";
@@ -21,6 +22,7 @@ export default function TriggersScreen() {
   const [liveTranscript, setLiveTranscript] = useState<string>("");
   const [sirenPlaying, setSirenPlaying] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const isVoiceFiringRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -56,20 +58,34 @@ export default function TriggersScreen() {
   };
 
   const handleTriggerVoiceSOS = async (keyword: string) => {
-    const clientEventId = `evt_${Date.now()}_voice_${Math.random().toString(36).substr(2, 6)}`;
-    
-    Alert.alert("🚨 Voice Trigger Detected!", `Detected Keyword: "${keyword.toUpperCase()}". Broadcasting SOS alert.`);
+    if (isVoiceFiringRef.current) {
+      console.warn("[VoiceSOS] Alert dispatch already in flight; ignoring repeat keyword.");
+      return;
+    }
+    isVoiceFiringRef.current = true;
 
-    const payload = {
-      client_event_id: clientEventId,
-      trigger: "voice" as const,
-      occurred_at: new Date().toISOString(),
-      share_location: true
-    };
+    try {
+      const clientEventId = generateSecureUUID();
+      
+      Alert.alert("🚨 Voice Trigger Detected!", `Detected Keyword: "${keyword.toUpperCase()}". Broadcasting SOS alert.`);
 
-    const res = await createIncidentAPI(payload);
-    if (!res) {
-      await offlineOutbox.enqueue(payload);
+      const payload = {
+        client_event_id: clientEventId,
+        trigger: "voice_keyword" as const,
+        occurred_at: new Date().toISOString(),
+        share_location: true
+      };
+
+      const res = await createIncidentAPI(payload);
+      if (!res) {
+        await offlineOutbox.enqueue(payload);
+      }
+    } catch (err) {
+      console.error("[VoiceSOS] Error dispatching voice SOS:", err);
+    } finally {
+      setTimeout(() => {
+        isVoiceFiringRef.current = false;
+      }, 3000); // 3-second debounce window prevents rapid spam from acoustic echoes
     }
   };
 

@@ -23,6 +23,7 @@ import { SafetyMap } from "../../src/components/SafetyMap";
 import { EvidenceRecorderModal } from "../../src/components/EvidenceRecorderModal";
 import { LiveShareModal } from "../../src/components/LiveShareModal";
 import { ReportHazardModal } from "../../src/components/ReportHazardModal";
+import { generateSecureUUID } from "../../src/utils/uuid";
 import {
   safetyRadarService,
   AreaSafetyScore,
@@ -35,7 +36,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const userDisplayName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "User";
-  const [location, setLocation] = useState<any>({ latitude: 28.6139, longitude: 77.2090, accuracy: 12 });
+  const [location, setLocation] = useState<{ latitude: number; longitude: number; accuracy?: number | null } | null>(null);
   const [activeIncident, setActiveIncident] = useState<IncidentResponse | null>(null);
   const activeIncidentRef = useRef<IncidentResponse | null>(null);
 
@@ -63,6 +64,7 @@ export default function HomeScreen() {
   const countdownTimerRef = useRef<any>(null);
   const holdTimerRef = useRef<any>(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const isSosFiringRef = useRef(false);
 
   useEffect(() => {
     if (gpsActive) {
@@ -81,8 +83,10 @@ export default function HomeScreen() {
     const initRadar = async () => {
       const hz = await safetyRadarService.getCommunityHazards();
       setHazards(hz);
-      const score = safetyRadarService.calculateAreaSafetyScore(location?.latitude || 28.6139, location?.longitude || 77.2090);
-      setSafetyScore(score);
+      if (location) {
+        const score = safetyRadarService.calculateAreaSafetyScore(location.latitude, location.longitude);
+        setSafetyScore(score);
+      }
     };
     initRadar();
 
@@ -110,7 +114,7 @@ export default function HomeScreen() {
     handleReconnectionSync();
   }, [noInternet]);
 
-  // Poll active incident status from backend
+  // Poll active incident status from backend & fresh GPS coordinates
   useEffect(() => {
     let interval: any;
     if (activeIncident && activeIncident.status !== "resolved") {
@@ -120,12 +124,28 @@ export default function HomeScreen() {
           if (updated) {
             setActiveIncident(updated);
           }
-          if (gpsActive && location) {
-            await sendLocationAPI(activeIncident.id, {
-              latitude: location.latitude,
-              longitude: location.longitude,
-              accuracy_m: location.accuracy || 12
-            });
+          if (gpsActive) {
+            try {
+              const fresh = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+              if (fresh?.coords) {
+                setLocation(fresh.coords);
+                await sendLocationAPI(activeIncident.id, {
+                  latitude: fresh.coords.latitude,
+                  longitude: fresh.coords.longitude,
+                  accuracy_m: fresh.coords.accuracy || 10,
+                  captured_at: new Date().toISOString()
+                });
+              }
+            } catch (e) {
+              if (location) {
+                await sendLocationAPI(activeIncident.id, {
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  accuracy_m: location.accuracy || 12,
+                  captured_at: new Date().toISOString()
+                });
+              }
+            }
           }
         }
         const pending = await offlineOutbox.getPending();
@@ -236,20 +256,31 @@ export default function HomeScreen() {
   };
 
   const fireSOSAlert = async (triggerType: "manual" | "shake" | "voice" = "manual") => {
-    const clientEventId = `evt_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    // Prevent duplicate SOS submissions from rapid double-tapping
+    if (isSosFiringRef.current) {
+      console.warn("[SOS] Alert dispatch already in flight; ignoring duplicate trigger.");
+      return;
+    }
+    isSosFiringRef.current = true;
+
+    try {
+      const clientEventId = generateSecureUUID();
     
     if (!sirenPlaying) {
       toggleSiren();
     }
 
+    const backendTrigger: "manual" | "shake" | "voice_keyword" | "missed_check_in" | "other" =
+      triggerType === "voice" ? "voice_keyword" : triggerType === "shake" ? "shake" : "manual";
+
     const payload = {
       client_event_id: clientEventId,
-      trigger: triggerType,
+      trigger: backendTrigger,
       occurred_at: new Date().toISOString(),
       location: gpsActive && location ? {
         latitude: location.latitude,
         longitude: location.longitude,
-        accuracy_m: location.accuracy || 12,
+        accuracy_m: location.accuracy || 10,
         captured_at: new Date().toISOString()
       } : undefined,
       share_location: true
@@ -261,7 +292,7 @@ export default function HomeScreen() {
         id: clientEventId,
         owner_id: "user-123",
         client_event_id: clientEventId,
-        trigger: triggerType,
+        trigger: backendTrigger,
         status: "draft_local" as const,
         alert_status: "queued" as const,
         started_at: new Date().toISOString()
@@ -281,7 +312,7 @@ export default function HomeScreen() {
         id: clientEventId,
         owner_id: "user-123",
         client_event_id: clientEventId,
-        trigger: triggerType,
+        trigger: backendTrigger,
         status: "draft_local" as const,
         alert_status: "queued" as const,
         started_at: new Date().toISOString()
@@ -289,7 +320,15 @@ export default function HomeScreen() {
       setActiveIncident(localIncident);
       activeIncidentRef.current = localIncident;
     }
-  };
+  } catch (err) {
+    console.error("[SOS] Error firing SOS alert:", err);
+    Alert.alert("SOS Emergency", "Emergency alert recorded locally. Outbox will sync when online.");
+  } finally {
+    setTimeout(() => {
+      isSosFiringRef.current = false;
+    }, 1200);
+  }
+};
 
   const handleResolveIncident = async () => {
     if (activeIncident && activeIncident.id) {
@@ -450,27 +489,32 @@ export default function HomeScreen() {
       <View style={styles.radarSection}>
         <View style={styles.radarHeader}>
           <Text style={styles.radarTitle}>▶ Live GPS Safety Radar</Text>
-          <View style={styles.activeBadge}>
-            <Text style={styles.activeBadgeText}>Active</Text>
-          </View>
+          <TouchableOpacity
+            onPress={() => router.push("/offline-maps" as any)}
+            style={styles.offlineManageBtn}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.offlineManageBtnText}>🗺️ Offline Maps</Text>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.coordText}>
-          Coordinates: {location ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}` : "28.6139, 77.2090"}
+          Coordinates: {location ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}` : "📍 Locating Device GPS..."}
         </Text>
         <Text style={styles.accuracyText}>
-          Accuracy: ±{location?.accuracy || 12} meters • Updated just now
+          {location ? `Accuracy: ±${location.accuracy || 12} meters • Live GPS` : "Awaiting device satellite fix..."}
         </Text>
 
         {/* Interactive OpenStreetMap & Safetipin Crowd Radar */}
         <SafetyMap
-          latitude={location?.latitude || 28.6139}
-          longitude={location?.longitude || 77.2090}
+          latitude={location?.latitude}
+          longitude={location?.longitude}
           accuracy={location?.accuracy || 12}
           crowdZones={crowdZones}
           hazards={hazards}
           isSosActive={!!activeIncident && activeIncident.status !== "resolved"}
           height={280}
+          onOpenMapManager={() => router.push("/offline-maps" as any)}
         />
 
         {/* bSafe & Safetipin Quick Action Buttons */}
@@ -837,6 +881,19 @@ const styles = StyleSheet.create({
   radarTitle: {
     color: "#FFFFFF",
     fontSize: 15,
+    fontWeight: "800"
+  },
+  offlineManageBtn: {
+    backgroundColor: "#1e3a8a",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#38bdf8"
+  },
+  offlineManageBtnText: {
+    color: "#38bdf8",
+    fontSize: 12,
     fontWeight: "800"
   },
   activeBadge: {

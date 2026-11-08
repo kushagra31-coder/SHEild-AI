@@ -4,22 +4,33 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  ActivityIndicator
+  ActivityIndicator,
+  TouchableOpacity
 } from "react-native";
 import { fetchIncidentsHistoryAPI, IncidentResponse } from "../../src/services/api";
 
 export default function IncidentScreen() {
   const [incidents, setIncidents] = useState<IncidentResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadIncidents = async () => {
     setIsLoading(true);
-    fetchIncidentsHistoryAPI().then(list => {
+    setFetchError(null);
+    try {
+      const list = await fetchIncidentsHistoryAPI();
       if (list && Array.isArray(list)) {
         setIncidents(list);
       }
+    } catch (e: any) {
+      setFetchError(e?.message || "Failed to connect to backend server");
+    } finally {
       setIsLoading(false);
-    });
+    }
+  };
+
+  useEffect(() => {
+    loadIncidents();
   }, []);
 
   const latestActive = incidents.find(i => i.status !== "resolved") || incidents[0];
@@ -109,9 +120,24 @@ export default function IncidentScreen() {
           <ActivityIndicator size="small" color="#ec4899" />
           <Text style={[styles.emptyText, { marginTop: 8 }]}>Loading incident audit log...</Text>
         </View>
+      ) : fetchError ? (
+        <View style={styles.emptyCard}>
+          <Text style={[styles.emptyText, { color: "#f87171", fontWeight: "700" }]}>
+            ⚠️ Backend Unreachable
+          </Text>
+          <Text style={[styles.emptyText, { fontSize: 11, color: "#94a3b8", marginTop: 4, textAlign: "center" }]}>
+            Set EXPO_PUBLIC_API_URL in .env to your PC's LAN IP address when testing on a physical device.
+          </Text>
+          <TouchableOpacity onPress={loadIncidents} activeOpacity={0.7} style={styles.refreshBtn}>
+            <Text style={styles.refreshBtnText}>🔄 Retry Audit Log</Text>
+          </TouchableOpacity>
+        </View>
       ) : incidents.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>No past emergency incidents recorded. Your safety log is clean.</Text>
+          <TouchableOpacity onPress={loadIncidents} activeOpacity={0.7} style={[styles.refreshBtn, { marginTop: 12 }]}>
+            <Text style={styles.refreshBtnText}>🔄 Refresh Audit Log</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         incidents.map((i) => (
@@ -172,5 +198,7 @@ const styles = StyleSheet.create({
   resolved: { backgroundColor: "#064e3b", color: "#34d399" },
   active: { backgroundColor: "#7f1d1d", color: "#ef4444" },
   timeText: { color: "#94a3b8", fontSize: 12, marginTop: 6 },
-  resolvedTime: { color: "#64748b", fontSize: 12, marginTop: 2 }
+  resolvedTime: { color: "#64748b", fontSize: 12, marginTop: 2 },
+  refreshBtn: { backgroundColor: "#1e293b", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "#334155" },
+  refreshBtnText: { color: "#38bdf8", fontSize: 12, fontWeight: "700" }
 });

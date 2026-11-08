@@ -9,25 +9,34 @@ import {
   Alert,
   ActivityIndicator
 } from "react-native";
+import { useRouter } from "expo-router";
 import * as Location from "expo-location";
-import { createJourneyAPI, fetchJourneysAPI, checkInJourneyAPI } from "../../src/services/api";
+import { createJourneyAPI, fetchJourneysAPI, checkInJourneyAPI, completeJourneyAPI, cancelJourneyAPI } from "../../src/services/api";
 import { SafetyMap } from "../../src/components/SafetyMap";
 import { safetyRadarService, SafeRouteOption, DEFAULT_CROWD_ZONES } from "../../src/services/safety-radar";
 
 export default function JourneyScreen() {
+  const router = useRouter();
   const [destination, setDestination] = useState("Connaught Place Market");
   const [etaMinutes, setEtaMinutes] = useState("25");
   const [selectedGuardian, setSelectedGuardian] = useState<string>("Mom");
   const [journeys, setJourneys] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [location, setLocation] = useState<any>({ latitude: 28.6139, longitude: 77.2090 });
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [routeType, setRouteType] = useState<"SAFEST" | "FASTEST">("SAFEST");
 
   const loadJourneys = async () => {
     setIsLoading(true);
-    const list = await fetchJourneysAPI();
-    setJourneys(list);
-    setIsLoading(false);
+    setFetchError(null);
+    try {
+      const list = await fetchJourneysAPI();
+      setJourneys(list);
+    } catch (e: any) {
+      setFetchError(e?.message || "Could not connect to backend");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -38,8 +47,8 @@ export default function JourneyScreen() {
   }, []);
 
   const routeOptions: SafeRouteOption[] = safetyRadarService.getSafeRouteOptions(
-    location.latitude,
-    location.longitude,
+    location?.latitude ?? 28.6139,
+    location?.longitude ?? 77.2090,
     destination || "Destination"
   );
 
@@ -61,9 +70,29 @@ export default function JourneyScreen() {
 
   const handleCheckIn = async (id: string) => {
     await checkInJourneyAPI(id);
-    Alert.alert("Safe Check-in", "Checked in safely!");
+    Alert.alert("Safe Check-in", "Checked in safely! Journey completed.");
     loadJourneys();
   };
+
+  const handleCancelJourney = async (id: string) => {
+    Alert.alert(
+      "Cancel Safe Journey",
+      "Are you sure you want to cancel this active journey?",
+      [
+        { text: "Keep Active", style: "cancel" },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: async () => {
+            await cancelJourneyAPI(id);
+            Alert.alert("Journey Cancelled", "Safe Journey has been cancelled.");
+            loadJourneys();
+          }
+        }
+      ]
+    );
+  };
+
 
   const guardians = [
     { id: "mom", name: "Mom (Mother)", isDefault: true },
@@ -93,12 +122,13 @@ export default function JourneyScreen() {
         </View>
 
         <SafetyMap
-          latitude={location.latitude}
-          longitude={location.longitude}
+          latitude={location?.latitude}
+          longitude={location?.longitude}
           crowdZones={DEFAULT_CROWD_ZONES}
           showRoute={true}
           routeType={routeType}
           height={240}
+          onOpenMapManager={() => router.push("/offline-maps" as any)}
         />
 
         {/* Route Selector Tabs (Safest vs Fastest) */}
@@ -200,11 +230,26 @@ export default function JourneyScreen() {
           <ActivityIndicator size="small" color="#ec4899" />
           <Text style={[styles.emptyText, { marginTop: 8 }]}>Loading active travel safeguards...</Text>
         </View>
+      ) : fetchError ? (
+        <View style={styles.emptyCard}>
+          <Text style={[styles.emptyText, { color: "#f87171", fontWeight: "700" }]}>
+            ⚠️ Backend Unreachable
+          </Text>
+          <Text style={[styles.emptyText, { fontSize: 11, color: "#94a3b8", marginTop: 4, textAlign: "center" }]}>
+            Set EXPO_PUBLIC_API_URL in .env to your PC's LAN IP address when testing on a physical device.
+          </Text>
+          <TouchableOpacity onPress={loadJourneys} activeOpacity={0.7} style={styles.retryBtn}>
+            <Text style={styles.retryBtnText}>🔄 Retry Connection</Text>
+          </TouchableOpacity>
+        </View>
       ) : journeys.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>
             No active journey currently set. Start a journey above to activate periodic check-in alerts and guardian location sync.
           </Text>
+          <TouchableOpacity onPress={loadJourneys} activeOpacity={0.7} style={[styles.retryBtn, { marginTop: 12 }]}>
+            <Text style={styles.retryBtnText}>🔄 Refresh</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         journeys.map((j) => (
@@ -217,9 +262,14 @@ export default function JourneyScreen() {
               ETA: {new Date(j.eta_at || Date.now() + 25 * 60000).toLocaleTimeString()}
             </Text>
             {j.status === "active" && (
-              <TouchableOpacity onPress={() => handleCheckIn(j.id)} activeOpacity={0.7} style={styles.checkInBtn}>
-                <Text style={styles.checkInText}>Check-in Safely ✓</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                <TouchableOpacity onPress={() => handleCheckIn(j.id)} activeOpacity={0.7} style={[styles.checkInBtn, { flex: 1, marginTop: 0 }]}>
+                  <Text style={styles.checkInText}>Check-in Safely ✓</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleCancelJourney(j.id)} activeOpacity={0.7} style={[styles.cancelJourneyBtn, { flex: 1 }]}>
+                  <Text style={styles.cancelJourneyText}>Cancel Journey ✕</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         ))
@@ -351,5 +401,9 @@ const styles = StyleSheet.create({
   statusBadge: { color: "#38bdf8", fontWeight: "800", fontSize: 12 },
   etaText: { color: "#94a3b8", fontSize: 12, marginTop: 4 },
   checkInBtn: { backgroundColor: "#064e3b", padding: 10, borderRadius: 10, marginTop: 10, alignItems: "center" },
-  checkInText: { color: "#34d399", fontWeight: "700" }
+  checkInText: { color: "#34d399", fontWeight: "700" },
+  cancelJourneyBtn: { backgroundColor: "#7f1d1d", padding: 10, borderRadius: 10, alignItems: "center" },
+  cancelJourneyText: { color: "#fca5a5", fontWeight: "700" },
+  retryBtn: { marginTop: 10, backgroundColor: "#1e293b", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: "#334155" },
+  retryBtnText: { color: "#38bdf8", fontSize: 12, fontWeight: "700" }
 });

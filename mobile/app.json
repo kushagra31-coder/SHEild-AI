@@ -29,7 +29,11 @@
         "RECORD_AUDIO",
         "CAMERA",
         "VIBRATE",
-        "RECEIVE_BOOT_COMPLETED"
+        "RECEIVE_BOOT_COMPLETED",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -48,7 +52,14 @@
         {
           "cameraPermission": "SHEild AI needs camera access for emergency video evidence capture."
         }
-      ]
-    ]
+      ],
+      "@maplibre/maplibre-react-native"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9994bee5-eaa7-4bdd-8708-4ae46187fd50"
+      }
+    }
   }
 }
